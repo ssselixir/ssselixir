@@ -11,6 +11,7 @@ Copy-paste the following into command line:
 
 ```
 git clone https://github.com/ssselixir/ssselixir.git ~/ssselixir
+cd ~/ssselixir
 cp config/app_config.yml.sample config/app_config.yml
 ```
 
