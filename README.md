@@ -20,5 +20,6 @@ Change the ports and passwords in `config/app_config.yml`
 
 ```
 cd ~/ssselixir
+mix deps.get
 nohup iex -S mix > /dev/null 2>&1 &
 ```
