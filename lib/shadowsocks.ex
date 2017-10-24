@@ -13,19 +13,39 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+defmodule Shadowsocks do
+  require Logger
 
-port = 55574
-password = "hello-ssselixir"
-
-import Logger
-
-defmodule ShadowSocks do
-  def start(client) do
+  def start_handle(client) do
     Task.start(fn -> handle(client) end)
   end
 
-  def start_link do
-    Task.start_link(fn -> loop_reply end)
+  def start_loop_reply do
+    Task.start_link(fn -> loop_reply() end)
+  end
+
+  def start(_type, _args) do
+    {:ok, data} = port_password()
+    Enum.each(data, fn {port, password} ->
+      Task.start(
+        fn ->
+          {:ok, server} = listen(port)
+          Logger.info "Start server on port: #{port}"
+          loop_accept(server, gen_key(password))
+        end
+      )
+    end)
+    {:ok, self()}
+  end
+
+  def port_password do
+    case :yamerl_constr.file("config/app_config.yml") |> List.first |> List.first do
+      {'port_password', data} ->
+        {:ok, data}
+      _ ->
+        Logger.error "Invalid configurations"
+        Process.exit(self(), :kill)
+    end
   end
 
   def listen(port) do
@@ -36,7 +56,7 @@ defmodule ShadowSocks do
   def loop_accept(server, key) do
     case accept(server) do
       {:ok, client} ->
-        {:ok, pid} = start(client)
+        {:ok, pid} = start_handle(client)
         send pid, {:key, key}
       _ ->
         Logger.error "Connection error"
@@ -67,35 +87,41 @@ defmodule ShadowSocks do
         {:ok, encrypted_data} = recv_data(sock)
         {data, decrypt_options} = decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
         encrypt_options = %{key: key, iv: :crypto.strong_rand_bytes(16), rest: <<>>, iv_sent: false}
-    end
-    addrtype = String.at(data, 0) |> Base.encode16 |> String.to_integer(16)
-    addrlen = String.at(data, 1) |> Base.encode16 |> String.to_integer(16)
-    case addrtype do
-      1 ->
-        addr = String.slice(data, 2, addrlen) |> String.to_charlist
-      3 ->
-        addr = String.slice(data, 2, addrlen) |> String.to_charlist
-      _ ->
-        Logger.error "Wrong type"
-    end
-    port = String.slice(data, 2+addrlen, 2) |> Base.encode16 |> String.to_integer(16)
-
-    Logger.info("Connect to " <> to_string(addr) <> to_string(port))
-    case create_remote_connection(addr, port) do
-      {:ok, remote} ->
-        rest_data = :binary.part(data, 4+addrlen, byte_size(data)-(4+addrlen))
-        if byte_size(rest_data) > 0, do: send_data(remote, rest_data)
-        handle_tcp(sock, remote, decrypt_options, encrypt_options)
-      {:error, _} ->
-        :gen_tcp.shutdown(sock, :read_write)
-        Logger.warn "Connected failed"
+        addrtype = String.at(data, 0) |> Base.encode16 |> String.to_integer(16)
+        addrlen = String.at(data, 1) |> Base.encode16 |> String.to_integer(16)
+        port = String.slice(data, 2+addrlen, 2) |> Base.encode16 |> String.to_integer(16)
+        result =
+          case addrtype do
+            1 ->
+              {:ok, String.slice(data, 2, addrlen) |> String.to_charlist}
+            3 ->
+              {:ok, String.slice(data, 2, addrlen) |> String.to_charlist}
+            _ ->
+              {:error, :invalid_addrtype}
+          end
+        case result do
+          {:ok, addr}->
+            Logger.info("Connect to " <> to_string(addr) <> to_string(port))
+            case create_remote_connection(addr, port) do
+              {:ok, remote} ->
+                rest_data = :binary.part(data, 4+addrlen, byte_size(data)-(4+addrlen))
+                if byte_size(rest_data) > 0, do: send_data(remote, rest_data)
+                handle_tcp(sock, remote, decrypt_options, encrypt_options)
+              {:error, _} ->
+                :gen_tcp.shutdown(sock, :read_write)
+                Logger.warn "Connected failed"
+            end
+          {:error, :invalid_addrtype} ->
+            Logger.error "Wrong type"
+            :gen_tcp.shutdown(sock, :read_write)
+        end
     end
   end
 
   def handle_tcp(client, remote, decrypt_options, encrypt_options) do
-    {:ok, c2r_pid} = start_link
+    {:ok, c2r_pid} = start_loop_reply()
     send c2r_pid, {:c2r, client, remote, decrypt_options, self()}
-    {:ok, r2c_pid} = start_link
+    {:ok, r2c_pid} = start_loop_reply()
     send r2c_pid, {:r2c, remote, client, encrypt_options, self()}
     receive do
       {:error, :closed} ->
@@ -108,8 +134,9 @@ defmodule ShadowSocks do
   end
 
   def gen_key(seed) do
-    hashed_seed = :crypto.hash(:md5, seed)
-    hashed_seed <> :crypto.hash(:md5, hashed_seed <> seed)
+    _seed = to_string(seed)
+    hashed_seed = :crypto.hash(:md5, _seed)
+    hashed_seed <> :crypto.hash(:md5, hashed_seed <> _seed)
   end
 
   def encrypt(data, %{key: key, iv: iv, rest: rest, iv_sent: iv_sent}) do
@@ -145,7 +172,7 @@ defmodule ShadowSocks do
     {decrypted_data, %{key: key, iv: iv, rest: rest}}
   end
 
-  defp loop_reply do
+  def loop_reply do
     receive do
       {:c2r, client, remote, decrypt_options, caller} ->
         reply(:c2r, client, remote, decrypt_options, caller)
@@ -174,12 +201,9 @@ defmodule ShadowSocks do
                 send caller, {:error, :closed}
             end
         end
-        loop_reply
+        loop_reply()
       _ ->
         send caller, {:error, :closed}
     end
   end
 end
-
-{:ok, server} = ShadowSocks.listen(port)
-ShadowSocks.loop_accept(server, ShadowSocks.gen_key(password))

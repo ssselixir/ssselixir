@@ -11,19 +11,14 @@ Copy-paste the following into command line:
 
 ```
 git clone https://github.com/ssselixir/ssselixir.git ~/ssselixir
+cp config/app_config.yml.sample config/app_config.yml
 ```
 
-Change the port on this line:
-
-https://github.com/ssselixir/ssselixir/blob/master/server.exs#L17
-
-Change the password:
-
-https://github.com/ssselixir/ssselixir/blob/master/server.exs#L18
+Change the ports and passwords in `config/app_config.yml`
 
 ## Run it background
 
 ```
 cd ~/ssselixir
-nohup elixir server.exs > /dev/null 2>&1 &
+nohup iex -S mix > /dev/null 2>&1 &
 ```
