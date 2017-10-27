@@ -25,8 +25,7 @@ defmodule Shadowsocks do
   end
 
   def start(_type, _args) do
-    {:ok, data} = port_password()
-    Enum.each(data, fn {port, password} ->
+    Enum.each(fetch_setting('port_password'), fn {port, password} ->
       Task.start(
         fn ->
           {:ok, server} = listen(port)
@@ -38,10 +37,9 @@ defmodule Shadowsocks do
     {:ok, self()}
   end
 
-  def port_password do
-    case :yamerl_constr.file("config/app_config.yml") |> List.first |> List.first do
-      {'port_password', data} ->
-        {:ok, data}
+  def fetch_setting(key) do
+    case :yamerl_constr.file("config/app_config.yml") |> List.first |> List.keyfind(key, 0) do
+      {key, data} -> data
       _ ->
         Logger.error "Invalid configurations"
         Process.exit(self(), :kill)
@@ -68,53 +66,66 @@ defmodule Shadowsocks do
     :gen_tcp.accept(server)
   end
 
-  def create_remote_connection(addr, port) do
+  def shutdown({:socket, socket}) do
+    :gen_tcp.shutdown(socket, :read_write)
+  end
+
+  def create_remote_connection(addr, port, timeout \\ fetch_setting('timeout') * 1000) do
     opts = [:binary, active: false]
-    :gen_tcp.connect(addr, port, opts)
+    :gen_tcp.connect(addr, port, opts, timeout)
   end
 
   def send_data(sock, data) do
     :gen_tcp.send(sock, data)
   end
 
-  def recv_data(sock) do
-    :gen_tcp.recv(sock, 0)
+  def recv_data(sock, timeout \\ fetch_setting('timeout') * 1000) do
+    :gen_tcp.recv(sock, 0, timeout)
+  end
+
+  def init_encrypt_options({:key, key}) do
+    %{key: key, iv: :crypto.strong_rand_bytes(16), rest: <<>>, iv_sent: false}
+  end
+
+  def parse_header(plain_data) do
+    addrtype = String.at(plain_data, 0) |> Base.encode16 |> String.to_integer(16)
+    addrlen = String.at(plain_data, 1) |> Base.encode16 |> String.to_integer(16)
+    port = String.slice(plain_data, 2+addrlen, 2) |> Base.encode16 |> String.to_integer(16)
+    if addrtype == 1 || addrtype == 3 do
+      addr = String.slice(plain_data, 2, addrlen) |> String.to_charlist
+      {:ok, addrlen, addr, port}
+    else
+      {:error, :invalid_header}
+    end
   end
 
   def handle(sock) do
     receive do
       {:key, key} ->
         {:ok, encrypted_data} = recv_data(sock)
-        {data, decrypt_options} = decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
-        encrypt_options = %{key: key, iv: :crypto.strong_rand_bytes(16), rest: <<>>, iv_sent: false}
-        addrtype = String.at(data, 0) |> Base.encode16 |> String.to_integer(16)
-        addrlen = String.at(data, 1) |> Base.encode16 |> String.to_integer(16)
-        port = String.slice(data, 2+addrlen, 2) |> Base.encode16 |> String.to_integer(16)
-        result =
-          case addrtype do
-            1 ->
-              {:ok, String.slice(data, 2, addrlen) |> String.to_charlist}
-            3 ->
-              {:ok, String.slice(data, 2, addrlen) |> String.to_charlist}
-            _ ->
-              {:error, :invalid_addrtype}
-          end
-        case result do
-          {:ok, addr}->
-            Logger.info("Connect to " <> to_string(addr) <> to_string(port))
+        {plain_data, decrypt_options} =
+          decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
+
+        case parse_header(plain_data) do
+          {:ok, addrlen, addr, port} ->
             case create_remote_connection(addr, port) do
               {:ok, remote} ->
-                rest_data = :binary.part(data, 4+addrlen, byte_size(data)-(4+addrlen))
+                Logger.info "Connect to #{addr}:#{port}"
+                rest_data = :binary.part(plain_data, 4+addrlen, byte_size(plain_data)-(4+addrlen))
                 if byte_size(rest_data) > 0, do: send_data(remote, rest_data)
-                handle_tcp(sock, remote, decrypt_options, encrypt_options)
+                handle_tcp(sock, remote, decrypt_options, init_encrypt_options({:key, key}))
+
               {:error, _} ->
-                :gen_tcp.shutdown(sock, :read_write)
-                Logger.warn "Connected failed"
+                shutdown({:socket, sock})
+                Logger.error "Connected failed or timeout"
             end
-          {:error, :invalid_addrtype} ->
-            Logger.error "Wrong type"
-            :gen_tcp.shutdown(sock, :read_write)
+          {:error, :invalid_header} ->
+            Logger.error "Invalid header"
+            shutdown({:socket, sock})
         end
+      _ ->
+        Logger.error "Wrong message received"
+        shutdown({:socket, sock})
     end
   end
 
@@ -125,9 +136,8 @@ defmodule Shadowsocks do
     send r2c_pid, {:r2c, remote, client, encrypt_options, self()}
     receive do
       {:error, :closed} ->
-        Logger.warn "Connection closed!"
-        :gen_tcp.shutdown(client, :read_write)
-        :gen_tcp.shutdown(remote, :read_write)
+        shutdown({:socket, client})
+        shutdown({:socket, remote})
         Process.exit(c2r_pid, :kill)
         Process.exit(r2c_pid, :kill)
     end
