@@ -1,4 +1,5 @@
 ---
+timeout: 10
 port_password:
   55574: "password1"
   55575: "password2"
