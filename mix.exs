@@ -1,9 +1,9 @@
-defmodule Shadowsocks.Mixfile do
+defmodule SSSelixir.Mixfile do
   use Mix.Project
 
   def project do
     [
-      app: :shadowsocks,
+      app: :ssselixir,
       version: "0.1.0",
       elixir: "~> 1.5",
       start_permanent: Mix.env == :prod,
@@ -15,7 +15,7 @@ defmodule Shadowsocks.Mixfile do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Shadowsocks, []}
+      mod: {SSSelixir, []}
     ]
   end
 

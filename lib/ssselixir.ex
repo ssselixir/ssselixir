@@ -13,7 +13,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-defmodule Shadowsocks do
+defmodule SSSelixir do
   require Logger
 
   def start_handle(client) do
