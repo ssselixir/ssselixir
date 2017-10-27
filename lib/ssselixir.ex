@@ -54,6 +54,8 @@ defmodule SSSelixir do
   def loop_accept(server, key) do
     case accept(server) do
       {:ok, client} ->
+        {:ok, {ip_addr, ip_port}} = :inet.peername(client)
+        Logger.info "Client info: #{:inet.ntoa(ip_addr)}:#{ip_port}"
         {:ok, pid} = start_handle(client)
         send pid, {:key, key}
       _ ->
