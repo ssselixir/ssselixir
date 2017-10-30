@@ -22,7 +22,9 @@ defmodule SSSelixir.Mixfile do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:yamerl, "~> 0.4.0"}
+      {:yamerl, "~> 0.4.0"},
+      {:mariaex, "~> 0.8.2"},
+      {:ecto, "~> 2.1"}
     ]
   end
 end
