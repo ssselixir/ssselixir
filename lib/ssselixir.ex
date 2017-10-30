@@ -24,8 +24,16 @@ defmodule SSSelixir do
     Task.start_link(fn -> loop_reply() end)
   end
 
+  def load_config do
+    :ets.new(:app_config, [:named_table])
+    :ets.insert(:app_config, {'port_password', fetch_setting('port_password')})
+    :ets.insert(:app_config, {'timeout', fetch_setting('timeout')})
+  end
+
   def start(_type, _args) do
-    Enum.each(fetch_setting('port_password'), fn {port, password} ->
+    load_config
+    [{'port_password', port_password}] = :ets.lookup(:app_config, 'port_password')
+    Enum.each(port_password, fn {port, password} ->
       Task.start(
         fn ->
           {:ok, server} = listen(port)
@@ -39,7 +47,9 @@ defmodule SSSelixir do
 
   def fetch_setting(key) do
     case :yamerl_constr.file("config/app_config.yml") |> List.first |> List.keyfind(key, 0) do
-      {key, data} -> data
+      {key, data} ->
+        Logger.info "Loading data"
+        data
       _ ->
         Logger.error "Invalid configurations"
         Process.exit(self(), :kill)
@@ -72,17 +82,19 @@ defmodule SSSelixir do
     :gen_tcp.shutdown(socket, :read_write)
   end
 
-  def create_remote_connection(addr, port, timeout \\ fetch_setting('timeout') * 1000) do
+  def create_remote_connection(addr, port) do
+    [{'timeout', timeout}] = :ets.lookup(:app_config, 'timeout')
     opts = [:binary, active: false]
-    :gen_tcp.connect(addr, port, opts, timeout)
+    :gen_tcp.connect(addr, port, opts, timeout * 1000)
   end
 
   def send_data(sock, data) do
     :gen_tcp.send(sock, data)
   end
 
-  def recv_data(sock, timeout \\ fetch_setting('timeout') * 1000) do
-    :gen_tcp.recv(sock, 0, timeout)
+  def recv_data(sock) do
+    [{'timeout', timeout}] = :ets.lookup(:app_config, 'timeout')
+    :gen_tcp.recv(sock, 0, timeout * 1000)
   end
 
   def init_encrypt_options({:key, key}) do
