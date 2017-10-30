@@ -36,9 +36,8 @@ defmodule SSSelixir do
     Enum.each(port_password, fn {port, password} ->
       Task.start(
         fn ->
-          {:ok, server} = listen(port)
           Logger.info "Start server on port: #{port}"
-          loop_accept(server, gen_key(password))
+          loop_accept(listen(port), gen_key(password))
         end
       )
     end)
@@ -61,17 +60,21 @@ defmodule SSSelixir do
     :gen_tcp.listen(port, opts)
   end
 
-  def loop_accept(server, key) do
+  def handle_accept(server, {:key, key}) do
     case accept(server) do
       {:ok, client} ->
         {:ok, {ip_addr, ip_port}} = :inet.peername(client)
         Logger.info "Client info: #{:inet.ntoa(ip_addr)}:#{ip_port}"
         {:ok, pid} = start_handle(client)
         send pid, {:key, key}
-      _ ->
-        Logger.error "Connection error"
+        {:ok, server}
+      {:error, :emfile} -> {:error, :server_error}
     end
-    loop_accept(server, key)
+  end
+
+  def loop_accept({:ok, server}=sevopts, key) do
+    handle_accept(server, {:key, key})
+    loop_accept(sevopts, key)
   end
 
   def accept(server) do
@@ -125,30 +128,34 @@ defmodule SSSelixir do
   def handle(sock) do
     receive do
       {:key, key} ->
-        {:ok, encrypted_data} = recv_data(sock)
-        {plain_data, decrypt_options} =
-          decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
-        case parse_header(plain_data) do
-          {:ok, addrtype, addrlen, addr, port} ->
-            case create_remote_connection(addr, port) do
-              {:ok, remote} ->
-                Logger.info "Connect to #{addr}:#{port}"
-                rest_data =
-                  if addrtype == 1 do
-                    :binary.part(plain_data, 3+addrlen, byte_size(plain_data)-(3+addrlen))
-                  else
-                    :binary.part(plain_data, 4+addrlen, byte_size(plain_data)-(4+addrlen))
-                  end
-                if byte_size(rest_data) > 0, do: send_data(remote, rest_data)
-                handle_tcp(sock, remote, decrypt_options, init_encrypt_options({:key, key}))
+        case recv_data(sock) do
+          {:ok, encrypted_data} ->
+            {plain_data, decrypt_options} =
+              decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
+            case parse_header(plain_data) do
+              {:ok, addrtype, addrlen, addr, port} ->
+                case create_remote_connection(addr, port) do
+                  {:ok, remote} ->
+                    Logger.info "Connect to #{addr}:#{port}"
+                    rest_data =
+                      if addrtype == 1 do
+                        :binary.part(plain_data, 3+addrlen, byte_size(plain_data)-(3+addrlen))
+                      else
+                        :binary.part(plain_data, 4+addrlen, byte_size(plain_data)-(4+addrlen))
+                      end
+                    if byte_size(rest_data) > 0, do: send_data(remote, rest_data)
+                    handle_tcp(sock, remote, decrypt_options, init_encrypt_options({:key, key}))
 
-              {:error, _} ->
+                  {:error, _} ->
+                    shutdown({:socket, sock})
+                    Logger.error "Connected failed or timeout"
+                end
+              {:error, :invalid_header} ->
+                Logger.error "Invalid header"
                 shutdown({:socket, sock})
-                Logger.error "Connected failed or timeout"
             end
-          {:error, :invalid_header} ->
-            Logger.error "Invalid header"
-            shutdown({:socket, sock})
+          {:error, _} ->
+            Logger.error "Connected timeout or closed"
         end
       _ ->
         Logger.error "Wrong message received"
