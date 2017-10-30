@@ -102,14 +102,23 @@ defmodule SSSelixir do
   end
 
   def parse_header(plain_data) do
-    addrtype = String.at(plain_data, 0) |> Base.encode16 |> String.to_integer(16)
-    addrlen = String.at(plain_data, 1) |> Base.encode16 |> String.to_integer(16)
-    port = String.slice(plain_data, 2+addrlen, 2) |> Base.encode16 |> String.to_integer(16)
-    if addrtype == 1 || addrtype == 3 do
-      addr = String.slice(plain_data, 2, addrlen) |> String.to_charlist
-      {:ok, addrlen, addr, port}
-    else
-      {:error, :invalid_header}
+    addrtype = plain_data |> binary_part(0, 1) |> to_i
+
+    case addrtype do
+      1 ->
+        <<p1, p2, p3, p4>> = binary_part(plain_data, 1, 4)
+        addr = :inet.ntoa({p1, p2, p3, p4})
+        addrlen = 4
+        port = plain_data |> binary_part(5, 2) |> to_i
+        {:ok, addrtype, addrlen, addr, port}
+
+      3 ->
+        addrlen = plain_data |> binary_part(1, 1) |> to_i
+        addr = plain_data |> binary_part(2, addrlen) |> to_charlist
+        port = plain_data |> binary_part(2+addrlen, 2) |> to_i
+        {:ok, addrtype, addrlen, addr, port}
+
+      _ -> {:error, :invalid_header}
     end
   end
 
@@ -119,13 +128,17 @@ defmodule SSSelixir do
         {:ok, encrypted_data} = recv_data(sock)
         {plain_data, decrypt_options} =
           decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
-
         case parse_header(plain_data) do
-          {:ok, addrlen, addr, port} ->
+          {:ok, addrtype, addrlen, addr, port} ->
             case create_remote_connection(addr, port) do
               {:ok, remote} ->
                 Logger.info "Connect to #{addr}:#{port}"
-                rest_data = :binary.part(plain_data, 4+addrlen, byte_size(plain_data)-(4+addrlen))
+                rest_data =
+                  if addrtype == 1 do
+                    :binary.part(plain_data, 3+addrlen, byte_size(plain_data)-(3+addrlen))
+                  else
+                    :binary.part(plain_data, 4+addrlen, byte_size(plain_data)-(4+addrlen))
+                  end
                 if byte_size(rest_data) > 0, do: send_data(remote, rest_data)
                 handle_tcp(sock, remote, decrypt_options, init_encrypt_options({:key, key}))
 
@@ -203,6 +216,10 @@ defmodule SSSelixir do
       {:r2c, remote, client, encrypt_options, caller} ->
         reply(:r2c, remote, client, encrypt_options, caller)
     end
+  end
+
+  defp to_i(data) do
+    data |> Base.encode16 |> String.to_integer(16)
   end
 
   defp reply(direction, from, to, crypto_options, caller) do
