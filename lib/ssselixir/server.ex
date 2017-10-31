@@ -18,32 +18,39 @@ require Logger
 defmodule SSSelixir.Server do
   use GenServer
 
-  # def start_link(_args) do
-  #   load_config()
-  #   [{'port_password', port_password}] = :ets.lookup(:app_config, 'port_password')
-  #   Enum.each(port_password, fn {port, password} ->
-  #     Task.start(
-  #       fn ->
-  #         Logger.info "Start server on port: #{port}"
-  #         loop_accept(listen(port), gen_key(password))
-  #       end
-  #     )
-  #   end)
-  #   {:ok, self()}
-  # end
-
-  def start_link(_args) do
+  def start_link(opts) do
     load_config()
-    port_passwords = SSSelixir.PortPassword |> SSSelixir.Repo.all
-    Enum.each(port_passwords, fn port_password ->
-      Task.start(
+    GenServer.start_link(__MODULE__, Mix.Project.config[:pp_store], opts)
+  end
+
+  def init(:file) do
+    [{'port_password', port_passwords}] = :ets.lookup(:app_config, 'port_password')
+    accept_list = []
+    Enum.each(port_passwords, fn {port, password} ->
+      Logger.info "Start server on port: #{port}"
+      {:ok, accept_pid} = Task.start_link(
         fn ->
-          Logger.info "Start server on port: #{port_password.port}"
+          loop_accept(listen(port), gen_key(password))
+        end
+      )
+      accept_list = accept_list ++ [accept_pid]
+    end)
+    {:ok, accept_list}
+  end
+
+  def init(:db) do
+    port_passwords = SSSelixir.PortPassword |> SSSelixir.Repo.all
+    accept_list = []
+    Enum.each(port_passwords, fn port_password ->
+      Logger.info "Start server on port: #{port_password.port}"
+      {:ok, accept_pid} = Task.start_link(
+        fn ->
           loop_accept(listen(port_password.port), gen_key(port_password.password))
         end
       )
+      accept_list = accept_list ++ [accept_pid]
     end)
-    {:ok, self()}
+    {:ok, accept_list}
   end
 
   def start_handle(client) do
@@ -83,13 +90,13 @@ defmodule SSSelixir.Server do
         Logger.info "Client info: #{:inet.ntoa(ip_addr)}:#{ip_port}"
         {:ok, pid} = start_handle(client)
         send pid, {:key, key}
-        {:ok, server}
-      {:error, :emfile} -> {:error, :server_error}
+        :ok
+      {:error, _} -> {:error, :server_error}
     end
   end
 
   def loop_accept({:ok, server}=sevopts, key) do
-    handle_accept(server, {:key, key})
+    :ok = handle_accept(server, {:key, key})
     loop_accept(sevopts, key)
   end
 
@@ -172,6 +179,7 @@ defmodule SSSelixir.Server do
             end
           {:error, _} ->
             Logger.error "Connected timeout or closed"
+            shutdown({:socket, sock})
         end
       _ ->
         Logger.error "Wrong message received"
@@ -188,8 +196,6 @@ defmodule SSSelixir.Server do
       {:error, :closed} ->
         shutdown({:socket, client})
         shutdown({:socket, remote})
-        Process.exit(c2r_pid, :kill)
-        Process.exit(r2c_pid, :kill)
     end
   end
 
@@ -252,7 +258,9 @@ defmodule SSSelixir.Server do
           :c2r ->
             {plain_data, decrypt_options} = decrypt(data, crypto_options)
             case send_data(to, plain_data) do
-              :ok -> send(self(), {:c2r, from, to, decrypt_options, caller})
+              :ok ->
+                send(self(), {:c2r, from, to, decrypt_options, caller})
+                loop_reply()
               {:error, _} ->
                 send caller, {:error, :closed}
             end
@@ -260,12 +268,13 @@ defmodule SSSelixir.Server do
           :r2c ->
             {encrypted_data, encrypt_options} = encrypt(data, crypto_options)
             case send_data(to, encrypted_data) do
-              :ok -> send(self(), {:r2c, from, to, encrypt_options, caller})
+              :ok ->
+                send(self(), {:r2c, from, to, encrypt_options, caller})
+                loop_reply()
               {:error, _} ->
                 send caller, {:error, :closed}
             end
         end
-        loop_reply()
       _ ->
         send caller, {:error, :closed}
     end

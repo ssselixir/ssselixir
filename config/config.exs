@@ -2,14 +2,16 @@
 # and its dependencies with the aid of the Mix.Config module.
 use Mix.Config
 
-config :ssselixir, ecto_repos: [SSSelixir.Repo]
+if Mix.Project.config[:pp_store] == :db do
+  config :ssselixir, ecto_repos: [SSSelixir.Repo]
 
-config :ssselixir, SSSelixir.Repo,
-  adapter: Ecto.Adapters.MySQL,
-  database: "ssselixir_repo",
-  username: "root",
-  password: "a",
-  hostname: "localhost"
+  config :ssselixir, SSSelixir.Repo,
+    adapter: Ecto.Adapters.MySQL,
+    database: "ssselixir_repo",
+    username: "root",
+    password: "a",
+    hostname: "localhost"
+end
 
 # This configuration is loaded before any dependency and is restricted
 # to this project. If another project depends on this project, this
