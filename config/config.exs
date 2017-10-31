@@ -3,9 +3,9 @@
 use Mix.Config
 
 if Mix.Project.config[:pp_store] == :db do
-  config :ssselixir, ecto_repos: [SSSelixir.Repo]
+  config :ssselixir, ecto_repos: [Ssselixir.Repo]
 
-  config :ssselixir, SSSelixir.Repo,
+  config :ssselixir, Ssselixir.Repo,
     adapter: Ecto.Adapters.MySQL,
     database: "ssselixir_repo",
     username: "root",

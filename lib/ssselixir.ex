@@ -15,18 +15,18 @@
 # under the License.
 require Logger
 
-defmodule SSSelixir do
+defmodule Ssselixir do
   use Application
 
   def start(_type, _args) do
     import Supervisor.Spec
 
     children = [
-      SSSelixir.Supervisor
+      Ssselixir.Supervisor
     ]
 
     if Mix.Project.config[:pp_store] == :db do
-      children = [SSSelixir.Repo] ++ children
+      children = [Ssselixir.Repo] ++ children
     end
 
     Supervisor.start_link(children, strategy: :one_for_one)

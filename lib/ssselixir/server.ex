@@ -15,10 +15,8 @@
 # under the License.
 require Logger
 
-defmodule SSSelixir.Server do
-  alias SSSelixir.Crypto
-  alias SSSelixir.PortPassword
-  alias SSSelixir.Repo
+defmodule Ssselixir.Server do
+  alias Ssselixir.{Crypto, PortPassword, Repo}
 
   use GenServer
 

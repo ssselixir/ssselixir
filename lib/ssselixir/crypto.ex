@@ -1,4 +1,4 @@
-defmodule SSSelixir.Crypto do
+defmodule Ssselixir.Crypto do
   def gen_key(seed) do
     dup_seed = to_string(seed)
     hashed_seed = :crypto.hash(:md5, dup_seed)

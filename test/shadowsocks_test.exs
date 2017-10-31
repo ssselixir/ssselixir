@@ -1,2 +1,2 @@
-defmodule SSSelixirTest do
+defmodule SsselixirTest do
 end

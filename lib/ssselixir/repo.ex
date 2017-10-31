@@ -1,4 +1,4 @@
-defmodule SSSelixir.Repo do
+defmodule Ssselixir.Repo do
   if Mix.Project.config[:pp_store] == :db do
     use Ecto.Repo, otp_app: :ssselixir
   end

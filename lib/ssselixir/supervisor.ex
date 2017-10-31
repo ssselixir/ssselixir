@@ -1,4 +1,4 @@
-defmodule SSSelixir.Supervisor do
+defmodule Ssselixir.Supervisor do
   use Supervisor
 
   def start_link(opts) do
@@ -7,7 +7,7 @@ defmodule SSSelixir.Supervisor do
 
   def init(:ok) do
     children = [
-      SSSelixir.Server
+      Ssselixir.Server
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

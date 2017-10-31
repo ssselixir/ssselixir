@@ -1,4 +1,4 @@
-defmodule SSSelixir.Repo.Migrations.CreatePortPasswords do
+defmodule Ssselixir.Repo.Migrations.CreatePortPasswords do
   use Ecto.Migration
 
   def change do

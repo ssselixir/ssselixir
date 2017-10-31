@@ -54,7 +54,7 @@ Once you executed the commands above, the table 'ssselixir_repo.port_passwords' 
 you can insert any records you needed via the following code:
 
 ```
-mix run -e 'SSSelixir.PortPassword.create(%{port: 5000, password: "password"})'
+mix run -e 'Ssselixir.PortPassword.create(%{port: 5000, password: "password"})'
 ```
 
 If a server is running, you can execute the following command to restart it.

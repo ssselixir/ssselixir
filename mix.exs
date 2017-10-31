@@ -1,5 +1,5 @@
 require Logger
-defmodule SSSelixir.Mixfile do
+defmodule Ssselixir.Mixfile do
   use Mix.Project
 
   def project do
@@ -17,7 +17,7 @@ defmodule SSSelixir.Mixfile do
   def application do
     [
       extra_applications: [:logger],
-      mod: {SSSelixir, []}
+      mod: {Ssselixir, []}
     ]
   end
 

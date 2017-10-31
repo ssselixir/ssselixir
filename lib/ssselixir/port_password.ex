@@ -1,6 +1,6 @@
-defmodule SSSelixir.PortPassword do
+defmodule Ssselixir.PortPassword do
   if Mix.Project.config[:pp_store] == :db do
-    alias SSSelixir.Crypto
+    alias Ssselixir.Crypto
 
     use Ecto.Schema
 
@@ -18,9 +18,9 @@ defmodule SSSelixir.PortPassword do
     end
 
     def create(%{port: _port, password: _password}=params) do
-      %SSSelixir.PortPassword{}
+      %Ssselixir.PortPassword{}
       |> changeset(params)
-      |> SSSelixir.Repo.insert
+      |> Ssselixir.Repo.insert
     end
   end
 end
