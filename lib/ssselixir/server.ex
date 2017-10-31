@@ -16,6 +16,10 @@
 require Logger
 
 defmodule SSSelixir.Server do
+  alias SSSelixir.Crypto
+  alias SSSelixir.PortPassword
+  alias SSSelixir.Repo
+
   use GenServer
 
   def start_link(opts) do
@@ -30,7 +34,7 @@ defmodule SSSelixir.Server do
       Logger.info "Start server on port: #{port}"
       {:ok, accept_pid} = Task.start_link(
         fn ->
-          loop_accept(listen(port), gen_key(password))
+          loop_accept(listen(port), Crypto.gen_key(password))
         end
       )
       accept_list = accept_list ++ [accept_pid]
@@ -39,15 +43,17 @@ defmodule SSSelixir.Server do
   end
 
   def init(:db) do
-    port_passwords = SSSelixir.PortPassword |> SSSelixir.Repo.all
+    port_passwords = PortPassword |> Repo.all
     accept_list = []
     Enum.each(port_passwords, fn port_password ->
       Logger.info "Start server on port: #{port_password.port}"
       {:ok, accept_pid} = Task.start_link(
         fn ->
-          loop_accept(listen(port_password.port), gen_key(port_password.password))
-        end
-      )
+          listen(port_password.port)
+          |> loop_accept(
+            port_password.password |> Crypto.base64_decoded_key
+          )
+        end)
       accept_list = accept_list ++ [accept_pid]
     end)
     {:ok, accept_list}
@@ -86,8 +92,6 @@ defmodule SSSelixir.Server do
   def handle_accept(server, {:key, key}) do
     case accept(server) do
       {:ok, client} ->
-        {:ok, {ip_addr, ip_port}} = :inet.peername(client)
-        Logger.info "Client info: #{:inet.ntoa(ip_addr)}:#{ip_port}"
         {:ok, pid} = start_handle(client)
         send pid, {:key, key}
         :ok
@@ -123,10 +127,6 @@ defmodule SSSelixir.Server do
     :gen_tcp.recv(sock, 0, timeout * 1000)
   end
 
-  def init_encrypt_options({:key, key}) do
-    %{key: key, iv: :crypto.strong_rand_bytes(16), rest: <<>>, iv_sent: false}
-  end
-
   def parse_header(plain_data) do
     addrtype = plain_data |> binary_part(0, 1) |> to_i
 
@@ -154,12 +154,13 @@ defmodule SSSelixir.Server do
         case recv_data(sock) do
           {:ok, encrypted_data} ->
             {plain_data, decrypt_options} =
-              decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
+              Crypto.decrypt(encrypted_data, %{key: key, iv: <<>>, rest: <<>>})
             case parse_header(plain_data) do
               {:ok, addrtype, addrlen, addr, port} ->
                 case create_remote_connection(addr, port) do
                   {:ok, remote} ->
-                    Logger.info "Connect to #{addr}:#{port}"
+                    {:ok, {ip_addr, ip_port}} = :inet.peername(sock)
+                    Logger.info "CONNECT TO #{addr}:#{port} FROM #{:inet.ntoa(ip_addr)}:#{ip_port}"
                     rest_data =
                       if addrtype == 1 do
                         :binary.part(plain_data, 3+addrlen, byte_size(plain_data)-(3+addrlen))
@@ -167,7 +168,7 @@ defmodule SSSelixir.Server do
                         :binary.part(plain_data, 4+addrlen, byte_size(plain_data)-(4+addrlen))
                       end
                     if byte_size(rest_data) > 0, do: send_data(remote, rest_data)
-                    handle_tcp(sock, remote, decrypt_options, init_encrypt_options({:key, key}))
+                    handle_tcp(sock, remote, decrypt_options, Crypto.init_encrypt_options({:key, key}))
 
                   {:error, _} ->
                     shutdown({:socket, sock})
@@ -199,45 +200,6 @@ defmodule SSSelixir.Server do
     end
   end
 
-  def gen_key(seed) do
-    dup_seed = to_string(seed)
-    hashed_seed = :crypto.hash(:md5, dup_seed)
-    hashed_seed <> :crypto.hash(:md5, hashed_seed <> dup_seed)
-  end
-
-  def encrypt(data, %{key: key, iv: iv, rest: rest, iv_sent: iv_sent}) do
-    rest_len = byte_size(rest)
-    data_len = byte_size(data)
-    len = div((data_len + rest_len), 16) * 16
-    <<data::binary-size(len), rest::binary>> = <<rest::binary, data::binary>>
-    enc_data = :crypto.block_encrypt(:aes_cfb128, key, iv, data)
-    new_iv = :binary.part(<<iv::binary, enc_data::binary>>, byte_size(enc_data)+16, -16)
-    enc_rest = :crypto.block_encrypt(:aes_cfb128, key, new_iv, rest)
-    encrypted_data = :binary.part(<<enc_data::binary, enc_rest::binary>>, rest_len, data_len)
-    if iv_sent do
-      { encrypted_data, %{key: key, iv: new_iv, rest: rest, iv_sent: iv_sent} }
-    else
-      { <<iv::binary, encrypted_data::binary>>, %{key: key, iv: new_iv, rest: rest, iv_sent: true}}
-    end
-  end
-
-  def decrypt(data, %{key: key, iv: iv, rest: rest}) do
-    if byte_size(iv) == 0 do
-      iv = :binary.part(data, 0, 16)
-      data = :binary.part(data, 16, byte_size(data)-16)
-    end
-    data_len = byte_size(data)
-    rest_len = byte_size(rest)
-    len = div((data_len+rest_len), 16) * 16
-    <<data::binary-size(len), rest::binary>> = <<rest::binary, data::binary>>
-
-    dec_data = :crypto.block_decrypt(:aes_cfb128, key, iv, data)
-    iv = :binary.part(<<iv::binary, data::binary>>, byte_size(data)+16, -16)
-    dec_rest = :crypto.block_decrypt(:aes_cfb128, key, iv, rest)
-    decrypted_data = :binary.part(<<dec_data::binary, dec_rest::binary>>, rest_len, data_len)
-    {decrypted_data, %{key: key, iv: iv, rest: rest}}
-  end
-
   def loop_reply do
     receive do
       {:c2r, client, remote, decrypt_options, caller} ->
@@ -256,7 +218,7 @@ defmodule SSSelixir.Server do
       {:ok, data} ->
         case direction do
           :c2r ->
-            {plain_data, decrypt_options} = decrypt(data, crypto_options)
+            {plain_data, decrypt_options} = Crypto.decrypt(data, crypto_options)
             case send_data(to, plain_data) do
               :ok ->
                 send(self(), {:c2r, from, to, decrypt_options, caller})
@@ -266,7 +228,7 @@ defmodule SSSelixir.Server do
             end
 
           :r2c ->
-            {encrypted_data, encrypt_options} = encrypt(data, crypto_options)
+            {encrypted_data, encrypt_options} = Crypto.encrypt(data, crypto_options)
             case send_data(to, encrypted_data) do
               :ok ->
                 send(self(), {:r2c, from, to, encrypt_options, caller})
