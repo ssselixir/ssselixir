@@ -17,6 +17,12 @@ require Logger
 defmodule Ssselixir do
   use Application
 
+  if Mix.Project.config[:pp_store] == :db do
+    def start(:db) do
+      Supervisor.start_link([Ssselixir.Repo], strategy: :one_for_one)
+    end
+  end
+
   def start(_type, _args) do
     import Supervisor.Spec
 
