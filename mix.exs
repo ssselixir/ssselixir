@@ -24,6 +24,7 @@ defmodule Ssselixir.Mixfile do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:logger_file_backend, "~> 0.0.10"},
       {:yamerl, "~> 0.4.0"},
       {:mariaex, "~> 0.8.2"},
       {:ecto, "~> 2.1"}
