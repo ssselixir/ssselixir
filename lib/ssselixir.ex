@@ -14,12 +14,13 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 require Logger
-
 defmodule Ssselixir do
   use Application
 
   def start(_type, _args) do
     import Supervisor.Spec
+
+    load_config()
 
     children = [
       Ssselixir.Supervisor
@@ -30,5 +31,24 @@ defmodule Ssselixir do
     end
 
     Supervisor.start_link(children, strategy: :one_for_one)
+  end
+
+  def load_config do
+    :ets.new(:app_config, [:named_table])
+    if Mix.Project.config[:pp_store] == :file do
+      :ets.insert(:app_config, {'port_password', fetch_setting('port_password')})
+    end
+    :ets.insert(:app_config, {'timeout', fetch_setting('timeout')})
+  end
+
+  def fetch_setting(key) do
+    case :yamerl_constr.file("config/app_config.yml") |> List.first |> List.keyfind(key, 0) do
+      {key, data} ->
+        Logger.info "Loading #{key}"
+        data
+      _ ->
+        Logger.error "Invalid configurations"
+        Process.exit(self(), :kill)
+    end
   end
 end

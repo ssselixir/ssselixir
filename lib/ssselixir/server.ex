@@ -18,43 +18,27 @@ require Logger
 defmodule Ssselixir.Server do
   alias Ssselixir.{Crypto, PortPassword, Repo}
 
-  use GenServer
-
-  def start_link(opts) do
-    load_config()
-    GenServer.start_link(__MODULE__, Mix.Project.config[:pp_store], opts)
+  def child_spec(_) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, []},
+      type: :worker,
+      restart: :permanent,
+      shutdown: 5000
+    }
   end
 
-  def init(:file) do
-    [{'port_password', port_passwords}] = :ets.lookup(:app_config, 'port_password')
-    accept_list = []
-    Enum.each(port_passwords, fn {port, password} ->
-      Logger.info "Start server on port: #{port}"
-      {:ok, accept_pid} = Task.start_link(
-        fn ->
-          loop_accept(listen(port), Crypto.gen_key(password))
-        end
-      )
-      accept_list = accept_list ++ [accept_pid]
+  def start_link(:file, %{port: port, password: password}) do
+    Task.start_link(fn ->
+      loop_accept(listen(port), Crypto.gen_key(password))
     end)
-    {:ok, accept_list}
   end
 
-  def init(:db) do
-    port_passwords = PortPassword |> Repo.all
-    accept_list = []
-    Enum.each(port_passwords, fn port_password ->
-      Logger.info "Start server on port: #{port_password.port}"
-      {:ok, accept_pid} = Task.start_link(
-        fn ->
-          listen(port_password.port)
-          |> loop_accept(
-            port_password.password |> Crypto.base64_decoded_key
-          )
-        end)
-      accept_list = accept_list ++ [accept_pid]
+  def start_link(:db, %{port_password: port_password}) do
+    Task.start_link(fn ->
+      listen(port_password.port)
+      |> loop_accept(Crypto.base64_decoded_key(port_password.password))
     end)
-    {:ok, accept_list}
   end
 
   def start_handle(client) do
@@ -63,23 +47,6 @@ defmodule Ssselixir.Server do
 
   def start_loop_reply do
     Task.start_link(fn -> loop_reply() end)
-  end
-
-  def load_config do
-    :ets.new(:app_config, [:named_table])
-    :ets.insert(:app_config, {'port_password', fetch_setting('port_password')})
-    :ets.insert(:app_config, {'timeout', fetch_setting('timeout')})
-  end
-
-  def fetch_setting(key) do
-    case :yamerl_constr.file("config/app_config.yml") |> List.first |> List.keyfind(key, 0) do
-      {key, data} ->
-        Logger.info "Loading data"
-        data
-      _ ->
-        Logger.error "Invalid configurations"
-        Process.exit(self(), :kill)
-    end
   end
 
   def listen(port) do
@@ -133,13 +100,24 @@ defmodule Ssselixir.Server do
         <<p1, p2, p3, p4>> = binary_part(plain_data, 1, 4)
         addr = :inet.ntoa({p1, p2, p3, p4})
         addrlen = 4
-        port = plain_data |> binary_part(5, 2) |> to_i
+        port =
+          plain_data
+          |> binary_part(5, 2)
+          |> to_i
+
         {:ok, addrtype, addrlen, addr, port}
 
       3 ->
-        addrlen = plain_data |> binary_part(1, 1) |> to_i
-        addr = plain_data |> binary_part(2, addrlen) |> to_charlist
-        port = plain_data |> binary_part(2+addrlen, 2) |> to_i
+        addrlen =
+          plain_data
+          |> binary_part(1, 1) |> to_i
+        addr = plain_data
+          |> binary_part(2, addrlen)
+          |> to_charlist
+        port = plain_data
+          |> binary_part(2+addrlen, 2)
+          |> to_i
+
         {:ok, addrtype, addrlen, addr, port}
 
       _ -> {:error, :invalid_header}
@@ -208,7 +186,9 @@ defmodule Ssselixir.Server do
   end
 
   defp to_i(data) do
-    data |> Base.encode16 |> String.to_integer(16)
+    data
+    |> Base.encode16
+    |> String.to_integer(16)
   end
 
   defp reply(direction, from, to, crypto_options, caller) do
