@@ -20,4 +20,5 @@ erl_crash.dump
 *.ez
 
 config/app_config.yml
+config/config.exs
 *.log
