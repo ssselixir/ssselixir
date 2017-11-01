@@ -26,6 +26,7 @@ defmodule Ssselixir do
   def start(_type, _args) do
     import Supervisor.Spec
 
+    init_ets_tables()
     load_config()
 
     children = [
@@ -39,8 +40,12 @@ defmodule Ssselixir do
     Supervisor.start_link(children, strategy: :one_for_one)
   end
 
-  def load_config do
+  def init_ets_tables do
     :ets.new(:app_config, [:named_table])
+    :ets.new(:app, [:named_table, :public])
+  end
+
+  def load_config do
     if Mix.Project.config[:pp_store] == :file do
       :ets.insert(:app_config, {'port_password', fetch_setting('port_password')})
     end
@@ -48,7 +53,11 @@ defmodule Ssselixir do
   end
 
   def fetch_setting(key) do
-    case :yamerl_constr.file("config/app_config.yml") |> List.first |> List.keyfind(key, 0) do
+    case Application.get_env(:ssselixir, :app_config_file)
+      |>:yamerl_constr.file
+      |> List.first
+      |> List.keyfind(key, 0) do
+
       {key, data} ->
         Logger.info "Loading #{key}"
         data

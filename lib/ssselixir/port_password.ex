@@ -7,6 +7,7 @@ defmodule Ssselixir.PortPassword do
     schema "port_passwords" do
       field :port, :integer
       field :password, :string
+      timestamps
     end
 
     def changeset(record, params \\ %{}) do

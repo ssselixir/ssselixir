@@ -9,7 +9,7 @@ defmodule Ssselixir.Mixfile do
       elixir: "~> 1.5",
       start_permanent: Mix.env == :prod,
       deps: deps(),
-      pp_store: :file
+      pp_store: :db
     ]
   end
 
