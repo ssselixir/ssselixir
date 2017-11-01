@@ -1,6 +1,7 @@
 require Logger
 defmodule Ssselixir.Supervisor do
   use Supervisor
+  alias Ssselixir.{PortPassword, Repo}
 
   def start_link(opts) do
     {:ok, supervisor} = Supervisor.start_link(__MODULE__, :ok, opts)
