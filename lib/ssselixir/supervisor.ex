@@ -29,7 +29,7 @@ defmodule Ssselixir.Supervisor do
         create_or_update_servers(:db, supervisor, port_passwords)
     end
 
-    if Mix.Project.config[:pp_store] == "db" do
+    if Mix.Project.config[:pp_store] == :db do
       Task.start_link(fn -> loop_update_servers(supervisor) end)
     end
     {:ok, supervisor}
