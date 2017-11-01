@@ -54,18 +54,15 @@ Once you executed the commands above, the table 'ssselixir_repo.port_passwords' 
 you can insert any records you needed via the following code:
 
 ```
-mix run -e 'Ssselixir.PortPassword.create(%{port: 5000, password: "password"})'
+mix ssselixir.newuser --port 55574 --password your-password
 ```
 
-If a server is running, you can execute the following command to restart it.
+**Note** Please restart the server once you added the new user.
 
-```
-killall -9 beam.smp; nohup iex -S mix > server.log 2>&1 &
-```
-
-## Run it background
+## Start/stop the server
 
 ```
 cd ~/ssselixir
-nohup iex -S mix > /dev/null 2>&1 &
+mix ssselixir.start
+mix ssselixir.stop
 ```
