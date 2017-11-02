@@ -2,7 +2,7 @@
 Shadowsocks server for Elixir, but more
 
 
-# Install Erlang/Elixir via asdf
+## Install Erlang/Elixir via asdf
 
 Run the following commands to install Erlang/Elixir:
 
@@ -62,9 +62,17 @@ To
 ```
 pp_store: :db
 ```
-You also need to change the database setting in these lines:
 
-https://github.com/ssselixir/ssselixir/blob/master/config/config.exs#L10-L13
+You need to change the following content in `config/config.exs`:
+
+```elixir
+config :ssselixir, Ssselixir.Repo,
+    adapter: Ecto.Adapters.MySQL,
+    database: "your-database",
+    username: "username",
+    password: "password",
+    hostname: "hostname"
+```
 
 Then execute the following commands:
 
@@ -79,12 +87,10 @@ you can insert/update any record you needed via the following code:
 
 ```
 # For a existing record, the command will update it,
-# ff new record exists, it will create the record for you,
+# if new record exists, it will create the record for you,
 # then reload into process
 mix ssselixir.user --port 55574 --password your-password
 ```
-
-**Note** Please restart the server once you added the new user.
 
 ## Start/stop the server
 
