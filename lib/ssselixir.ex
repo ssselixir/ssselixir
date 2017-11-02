@@ -24,8 +24,6 @@ defmodule Ssselixir do
   end
 
   def start(_type, _args) do
-    import Supervisor.Spec
-
     init_ets_tables()
     load_config()
 
@@ -43,6 +41,7 @@ defmodule Ssselixir do
   def init_ets_tables do
     :ets.new(:app_config, [:named_table])
     :ets.new(:app, [:named_table, :public])
+    :ets.new(:processes, [:named_table, :public])
   end
 
   def load_config do

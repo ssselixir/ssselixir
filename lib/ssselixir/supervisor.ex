@@ -59,9 +59,9 @@ defmodule Ssselixir.Supervisor do
 
   defp create_or_update_servers(:db, supervisor, port_passwords) do
     Enum.each(port_passwords, fn port_password ->
-      Logger.info "Start server on port: #{port_password.port}"
-      Supervisor.start_child(supervisor, [:db, %{port_password: port_password}])
+      update_child_and_ets(supervisor, port_password)
     end)
+
     last_record = List.last(port_passwords)
     if last_record != nil do
       {:ok, datetime} = Ecto.DateTime.cast(last_record.updated_at)
@@ -70,5 +70,24 @@ defmodule Ssselixir.Supervisor do
       {:ok, datetime} = Ecto.DateTime.cast DateTime.utc_now
       :ets.insert(:app, {'mtime', Ecto.DateTime.to_erl(datetime) })
     end
+  end
+
+  defp update_child_and_ets(supervisor, port_password) do
+    port = port_password.port
+
+
+    # Terminate the previous child process if it is exists
+    case :ets.lookup(:processes, port) do
+      [{^port, prev_child}] ->
+        Logger.info "Restart server on port: #{port}"
+        :ok = Supervisor.terminate_child(supervisor, prev_child)
+        true = :ets.delete(:processes, port)
+      [] ->
+        Logger.info "Start server on port: #{port}"
+    end
+
+    # Start a child
+    {:ok, child} = supervisor |> Supervisor.start_child([:db, %{port_password: port_password}])
+    :ets.insert(:processes, {port, child})
   end
 end
