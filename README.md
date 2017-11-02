@@ -51,10 +51,13 @@ mix ecto.migrate
 ```
 
 Once you executed the commands above, the table 'ssselixir_repo.port_passwords' should be created,
-you can insert any records you needed via the following code:
+you can insert/update any record you needed via the following code:
 
 ```
-mix ssselixir.newuser --port 55574 --password your-password
+# For a existing record, the command will update it,
+# ff new record exists, it will create the record for you,
+# then reload into process
+mix ssselixir.user --port 55574 --password your-password
 ```
 
 **Note** Please restart the server once you added the new user.
