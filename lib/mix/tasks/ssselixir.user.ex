@@ -4,13 +4,16 @@ defmodule Mix.Tasks.Ssselixir.User do
   alias Ssselixir.{PortPassword, Repo}
 
   def run(args) do
+    unless Mix.Project.config[:pp_store] == :db do
+      raise "Unsupport user operation, because pp_store is :file"
+    end
     {[port: port, password: password], _, _} =
       OptionParser.parse(args, switches: [port: :integer, password: :string])
     Application.ensure_all_started(:ecto)
     Ssselixir.start(:db)
     pp = Repo.one(from u in PortPassword, where: u.port == ^port)
     case pp do
-      %PortPassword{} ->
+      %{} ->
         {:ok, _} = pp
           |> PortPassword.changeset(%{password: password})
           |> Repo.update
