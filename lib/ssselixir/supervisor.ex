@@ -25,7 +25,12 @@ defmodule Ssselixir.Supervisor do
         [{'port_password', port_passwords}] = :ets.lookup(:app_config, 'port_password')
         create_or_update_servers(:file, supervisor, port_passwords)
       :db ->
-        port_passwords = Repo.all(from p in PortPassword, order_by: p.updated_at)
+        utc_now = Ecto.DateTime.utc |> to_string
+        port_passwords =
+          Repo.all(
+            from p in PortPassword,
+            where: p.end_at > ^utc_now,
+            order_by: p.port)
         create_or_update_servers(:db, supervisor, port_passwords)
     end
 
@@ -37,12 +42,24 @@ defmodule Ssselixir.Supervisor do
 
   defp loop_update_servers(supervisor) do
     [{'mtime', mtime}] = :ets.lookup(:app, 'mtime')
+
     datetime = mtime |> Ecto.DateTime.from_erl |> to_string
-    port_passwords = Repo.all(
-      from p in PortPassword,
-      where: p.updated_at > ^datetime,
-      order_by: p.updated_at)
+    utc_now = Ecto.DateTime.utc |> to_string
+    port_passwords =
+      Repo.all(
+        from p in PortPassword,
+        where: p.updated_at > ^datetime and p.end_at > ^utc_now,
+        order_by: p.updated_at)
+
     create_or_update_servers(:db, supervisor, port_passwords)
+
+    outdated_port_passwords =
+      Repo.all(
+        from p in PortPassword,
+        where: p.end_at >= ^datetime and p.end_at <= ^utc_now,
+        order_by: p.updated_at)
+
+    shutdown_servers(:db, supervisor, outdated_port_passwords)
 
     :timer.sleep(60_000)
     loop_update_servers(supervisor)
@@ -67,26 +84,33 @@ defmodule Ssselixir.Supervisor do
       {:ok, datetime} = Ecto.DateTime.cast(last_record.updated_at)
       :ets.insert(:app, {'mtime', Ecto.DateTime.to_erl(datetime) })
     else
-      {:ok, datetime} = Ecto.DateTime.cast DateTime.utc_now
+      datetime = Ecto.DateTime.utc
       :ets.insert(:app, {'mtime', Ecto.DateTime.to_erl(datetime) })
+    end
+  end
+
+  defp shutdown_servers(:db, supervisor, port_passwords) do
+    Enum.each(port_passwords, fn(port_password) ->
+      terminate_child(supervisor, port_password.port)
+    end)
+  end
+
+  defp terminate_child(supervisor, port) do
+    # Terminate the previous child process if it is exists
+    case :ets.lookup(:processes, port) do
+      [{^port, prev_child}] ->
+        Logger.info "Stop server on port: #{port}"
+        :ok = Supervisor.terminate_child(supervisor, prev_child)
+        true = :ets.delete(:processes, port)
+      [] -> nil
     end
   end
 
   defp update_child_and_ets(supervisor, port_password) do
     port = port_password.port
-
-
-    # Terminate the previous child process if it is exists
-    case :ets.lookup(:processes, port) do
-      [{^port, prev_child}] ->
-        Logger.info "Restart server on port: #{port}"
-        :ok = Supervisor.terminate_child(supervisor, prev_child)
-        true = :ets.delete(:processes, port)
-      [] ->
-        Logger.info "Start server on port: #{port}"
-    end
-
+    terminate_child(supervisor, port)
     # Start a child
+    Logger.info "Start server on port: #{port}"
     {:ok, child} = supervisor |> Supervisor.start_child([:db, %{port_password: port_password}])
     :ets.insert(:processes, {port, child})
   end
