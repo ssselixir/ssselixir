@@ -90,7 +90,7 @@ The following arguments can be passed:
 - `--port`: Listening port
 - `--password`: The password you want to use
 - `--start-time`: Set start time of the user, you can set it to `now` or `"YYYY-MM-DD HH:MM:SS"`
-- `--range`: Set term of validity, you can set it to `x.day(s)`, `x.month(s)` or `x.year(s)`
+- `--range`: Set term of validity, you can set it to `x.hour(s)`, `x.day(s)`, `x.month(s)` , `x.year(s)` or `forever`
 
 **Note** These arguments are required for creating a user.
 

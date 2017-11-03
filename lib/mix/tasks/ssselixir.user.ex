@@ -37,7 +37,15 @@ defmodule Mix.Tasks.Ssselixir.User do
   end
 
   def get_endtime({date, time}, range) do
-    case Regex.run(~r/([0-9]+)\.+(day|month|year)/, range) do
+    case Regex.run(~r/([0-9]+)\.+(hour|day|month|year)/, range) do
+      [_, count, "hour"] ->
+        count = String.to_integer(count)
+        {hour, minute, second} = time
+        days = div(count + hour, 24)
+        rest_hour = rem(count + hour, 24)
+        {:ok, date} = Date.from_erl(date)
+        end_date = Date.add(date, days) |> Date.to_erl
+        {end_date, {rest_hour, minute, second}}
       [_, count, "day"] ->
         count = String.to_integer(count)
         {:ok, date} = Date.from_erl(date)
