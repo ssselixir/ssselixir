@@ -7,15 +7,17 @@ defmodule Ssselixir.PortPassword do
     schema "port_passwords" do
       field :port, :integer
       field :password, :string
-      timestamps
+      field :started_at, :naive_datetime
+      field :end_at, :naive_datetime
+      timestamps()
     end
 
     def changeset(record, params \\ %{}) do
       # Encrypt password before saving
       params = %{params | password: Crypto.gen_base64_encoded_key(params[:password])}
       record
-      |> Ecto.Changeset.cast(params, [:port, :password])
-      |> Ecto.Changeset.validate_required([:port, :password])
+      |> Ecto.Changeset.cast(params, [:port, :password, :started_at, :end_at])
+      |> Ecto.Changeset.validate_required([:port, :password, :started_at, :end_at])
     end
 
     def create(%{port: _port, password: _password}=params) do
