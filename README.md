@@ -85,12 +85,29 @@ mix ecto.migrate
 Once you executed the commands above, the table 'ssselixir_repo.port_passwords' should be created,
 you can insert/update any record you needed via the following code:
 
+The following arguments can be passed:
+
+- `--port`: Listening port
+- `--password`: The password you want to use
+- `--start-time`: Set start time of the user, you can set it to `now` or `"YYYY-MM-DD HH:MM:SS"`
+- `--range`: Set term of validity, you can set it to `x.day(s)`, `x.month(s)` or `x.year(s)`
+
+**Note** These arguments are required for creating a user.
+
+**Examples**
+
+Create a user and provide service from now until 10 days later.
+
 ```
-# For a existing record, the command will update it,
-# if new record exists, it will create the record for you,
-# then reload into process
-mix ssselixir.user --port 55574 --password your-password
+mix ssselixir.user --port 55555 --password my-password --start-time now --range 10.days
 ```
+
+Update an existing user
+
+```
+mix ssselixir.user --port 55555 --password my-new-password
+```
+
 
 ## Start/stop the server
 
