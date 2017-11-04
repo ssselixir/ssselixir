@@ -1,6 +1,8 @@
 # ssselixir
 Shadowsocks server for Elixir, but more
 
+## Wiki
+[Ecrypt/Decrypt data](https://github.com/ssselixir/ssselixir/wiki/Ssselixir-Encrypt-&-Decrypt-data)
 
 ## Install Erlang/Elixir via asdf
 
