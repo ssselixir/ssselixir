@@ -93,13 +93,13 @@ defmodule Mix.Tasks.Ssselixir.User do
     end
   end
 
-  defp create_or_update(%{port: port, password: password, started_at: start_time, end_at: end_time}) do
+  defp create_or_update(%{port: port, password: password, started_at: start_time, end_at: end_time}=params) do
     ensure_started_db()
     pp = Repo.one(from u in PortPassword, where: u.port == ^port)
-    changed_cols = %{started_at: start_time, end_at: end_time}
 
     case pp do
       %{} ->
+        changed_cols = %{started_at: start_time, end_at: end_time}
         if password |> is_binary do
           changed_cols = Map.put(changed_cols, :password, password)
         end
@@ -112,7 +112,7 @@ defmodule Mix.Tasks.Ssselixir.User do
           raise "Password is required when creating record."
         end
         IO.puts "The record for port '#{port}' has been created"
-        PortPassword.create(%{port: port, password: password})
+        PortPassword.create(params)
     end
   end
 end

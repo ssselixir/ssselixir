@@ -14,13 +14,15 @@ defmodule Ssselixir.PortPassword do
 
     def changeset(record, params \\ %{}) do
       # Encrypt password before saving
-      params = %{params | password: Crypto.gen_base64_encoded_key(params[:password])}
+      if (params[:password] |> to_string |> String.length) > 0 do
+        params = %{params | password: Crypto.gen_base64_encoded_key(params[:password])}
+      end
       record
       |> Ecto.Changeset.cast(params, [:port, :password, :started_at, :end_at])
       |> Ecto.Changeset.validate_required([:port, :password, :started_at, :end_at])
     end
 
-    def create(%{port: _port, password: _password}=params) do
+    def create(params) do
       %Ssselixir.PortPassword{}
       |> changeset(params)
       |> Ssselixir.Repo.insert
