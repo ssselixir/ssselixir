@@ -54,9 +54,13 @@ defmodule Mix.Tasks.Ssselixir.User do
       [_, count, "month"] ->
         count = String.to_integer(count)
         {year, month, day} = date
-        year = year + div(count + month, 12)
+        updated_year = year + div(count + month, 12)
         month = rem(count + month, 12)
-        {{year, month, day}, time}
+        if updated_year > year && month == 0 do
+          updated_year = updated_year - 1
+          month = 12
+        end
+        {{updated_year, month, day}, time}
       [_, count, "year"] ->
         count = String.to_integer(count)
         {year, month, day} = date
