@@ -36,7 +36,11 @@ defmodule Ssselixir.Server do
 
   def start_link(:db, %{port_password: port_password}) do
     Task.start_link(fn ->
-      listen(port_password.port)
+      case listen(port_password.port) do
+        {:ok, server} ->
+          loop_accept({:ok, server}, Crypto.base64_decoded_key(port_password.password))
+        _ -> Logger.error "Invalid operation"
+      end
       |> loop_accept(Crypto.base64_decoded_key(port_password.password))
     end)
   end
